@@ -4,270 +4,317 @@ import streamlit as st
 import matplotlib.pyplot as plt
 
 # ==============================================================================
-# 1. CONSTANTES Y PARÁMETROS (Basados en Tabla 2 y archivos adjuntos)
+# 1. CONSTANTES Y PARÁMETROS (Tabla X.4 — Capítulo X)
 # ==============================================================================
 
-# Parámetros del calderín
-Cpa_BASE = 4.18    # Capacidad calorífica del agua (J/g ºC) 
-Tain_BASE = 30.0   # Temperatura del agua de entrada al calderín (ºC) 
-Teb_BASE = 100.0   # Temperatura de ebullición (ºC) 
-lambda_a_BASE = 2257.0 # Calor específico de vaporización del agua (J/g) 
+Cpa_BASE      = 4.18      # Capacidad calorífica del agua (J/g ºC)
+Tain_BASE     = 20.0      # Temperatura del agua de entrada al calderín (ºC)
+Teb_BASE      = 100.0     # Temperatura de ebullición (ºC)
+lambda_a_BASE = 2257.0    # Calor específico de vaporización del agua (J/g)
 
-# Parámetros del material vegetal y difusión
-VMV_BASE = 500.0   # Volumen de Material Vegetal (cm³) 
-C0_BASE = 0.05     # Concentración inicial de AE en MV (g/cm³) 
-h_BASE = 0.2       # Semiespesor de la lámina plana (cm) 
-D_BASE = 1.0e-6    # Coeficiente de difusión del AE en el sólido (cm²/s) 
+VMV_BASE      = 2500.0    # Volumen de Material Vegetal (cm³)
+C0_BASE       = 0.006     # Concentración inicial de AE en MV (g/cm³)
+h_BASE        = 10.0      # Semiespesor del lecho (cm)
+D_BASE        = 1.0e-2    # Coeficiente de difusión del AE en el sólido (cm²/s) ≈ 1e-6 m²/s
+rho_AE_BASE   = 0.84      # Densidad del AE (g/mL) — verificar experimentalmente
 
-# Parámetros económicos
-PrecioAE_BASE = 3000.0 # Precio de mercado del AE ($/cm³) [cite: 275]
-PrecioEnv_BASE = 600.0 # Precio del envase de 10 ml ($/unidad) [cite: 273]
-VolumenEnv = 10.0  # Volumen del envase (cm³) (10 ml) [cite: 280]
-CF_BASE = 25000.0  # Costos Fijos por lote ($/lote) 
-rho_AE_BASE = 0.9  # Densidad del AE (g/cm³) [cite: 276]
+PrecioAE_BASE  = 4200.0   # Precio de mercado del AE ($/mL) — Aromáticas Alto Valle, 2026
+PrecioEnv_BASE = 630.0    # Precio del envase de 10 mL ($/unidad) — MercadoLibre, 2026
+VolumenEnv     = 10.0     # Volumen del envase (mL)
+CF_BASE        = 14520.0  # Costos fijos ($/lote): 8 h × $1.815/h — SMVM Res. 9/2025
 
-# Costos de energía eléctrica (Tabla xx y archivo adjunto)
-costo_electrico = {
-    'Cv': 95.9532     # Cargo variable ($/kWh) 
-}
+# Tarifa EDESAL (Tabla X.3 — Capítulo X)
+Cf_EDESAL  = 9634.9154    # Cargo fijo ($/mes)
+Cr_EDESAL  = 18963.3389   # Cargo uso de red ($/mes)
+Cv_BASE    = 117.9787     # Cargo variable ($/kWh)
+factor_imp = 1.27383      # Factor impositivo (IVA 21% + Contrib. Municipal 6,383%)
 
 # ==============================================================================
-# 2. FUNCIONES DE CÁLCULO (Ecuaciones del documento)
+# 2. FUNCIONES DE CÁLCULO (Ecuaciones del Capítulo X)
 # ==============================================================================
 
 def calcular_mv(PeR, eta_c, Cpa, Teb, Tain, lambda_a):
-    """Calcula el caudal de vapor generado mv (g/s) - Ecuación 24."""
-    # mv =(1-ηc) PeR / (Cpa*(Teb-Tain)+a)
-    numerador = (1 - eta_c) * PeR
+    """Caudal de vapor generado mv (g/s) — Ecuación 26."""
+    numerador   = (1 - eta_c) * PeR
     denominador = Cpa * (Teb - Tain) + lambda_a
     if denominador == 0:
         return 0.0
-    mv = numerador / denominador
-    return mv 
+    return numerador / denominador
 
 def mAE_acum(tf, F1, F2, n_terms=10):
-    """Calcula la masa acumulada de AE en el tiempo tf (g) - Ecuación 13."""
-    mAE_total = 0.0
+    """Masa acumulada de AE en el tiempo tf (g) — Ecuación 14."""
+    total = 0.0
     for n in range(n_terms):
-        term_factor = (2 * n + 1)**2
-        if F2 * term_factor == 0:
+        term = (2 * n + 1)**2
+        if F2 * term == 0:
             continue
-        mAE_total += (1 - np.exp(-F2 * term_factor * tf)) / (F2 * term_factor)
-    
-    mAE_acum_val = F1 * mAE_total
-    return mAE_acum_val 
+        total += (1 - np.exp(-F2 * term * tf)) / (F2 * term)
+    return F1 * total
 
 def calcular_xc(mAE_acum_val, mv, tf):
-    """Calcula la composición del condensado xc (masa de AE/masa de condensado) - Ecuación 16."""
-    mvacum = mv * tf
-    mc_t = mAE_acum_val + mvacum
-    if mc_t == 0:
+    """Composición del condensado xc (g AE/g condensado) — Ecuación 17."""
+    mc = mAE_acum_val + mv * tf
+    if mc == 0:
         return 0.0
-    xc_val = mAE_acum_val / mc_t
-    return xc_val
+    return mAE_acum_val / mc
 
 def calcular_rendimiento(mAE_acum_val, VMV, C0):
-    """Calcula el rendimiento porcentual (%Rend) - Ecuación 20."""
-    MAE0 = VMV * C0 # Masa inicial de AE (Ecuación 17)
+    """Rendimiento de extracción %Rend — Ecuación 22."""
+    MAE0 = VMV * C0
     if MAE0 == 0:
         return 0.0
-    # Ecuación 20: %Rend=MAE(t)/MAE0 * 100.
-    # El documento parece tener un error en la Ecuación 20 y usa MAE(t) (remanente), pero la definición es de mAE_acum.
-    # Usaremos la definición estándar (masa extraída/masa inicial) que es consistente con el resultado de 41.24%.
     return (mAE_acum_val / MAE0) * 100.0
 
 def mAE_acum_vol(mAE_acum_val, rho_AE):
-    """Convierte la masa acumulada de AE a volumen (cm³)."""
+    """Conversión masa AE a volumen (mL) — Ecuación 33."""
     if rho_AE == 0:
         return 0.0
-    return mAE_acum_val / rho_AE 
+    return mAE_acum_val / rho_AE
 
-def ingresos(mAE_acum_val, PrecioAE, rho_AE):
-    """Calcula los ingresos I(tf) ($) - Ecuación 31."""
+def calcular_ingresos(mAE_acum_val, PrecioAE, rho_AE):
+    """Ingresos I(tf) ($/lote) — Ecuación 33."""
+    return mAE_acum_vol(mAE_acum_val, rho_AE) * PrecioAE
+
+def calcular_N(mAE_acum_val, rho_AE, VolumenEnv):
+    """Número de envases N — Ecuación 36."""
     V_AE = mAE_acum_vol(mAE_acum_val, rho_AE)
-    I_tf = V_AE * PrecioAE
-    return I_tf 
+    return int(np.floor(V_AE / VolumenEnv))
 
-def costo_operacion(tf, PeR, Cv, PrecioEnv, rho_AE, VolumenEnv, mAE_acum_val):
-    """Calcula el costo de operación CO(tf) ($) - Ecuación 32."""
-    
-    # 1. Costo Eléctrico (Celect) - Solo la parte variable por lote (tf) para CO(tf).
-    # PeR en W, tf en s. Cv en $/kWh. Convertimos PeR*tf a kWh
-    PeR_kWh = PeR / 1000.0 
-    tf_h = tf / 3600.0     
-    Celect_tf = Cv * PeR_kWh * tf_h 
-    
-    # 2. Número de envases (N)
-    V_AE = mAE_acum_vol(mAE_acum_val, rho_AE)
-    N = np.ceil(V_AE / VolumenEnv)
-    
-    # 3. CO(tf) = Celect(tf) + N * PrecioEnv (Ecuación 32)
-    CO_tf = Celect_tf + N * PrecioEnv
-    return CO_tf, N
+def calcular_Celect(tf, PeR, Cv):
+    """Costo de energía eléctrica CEE ($/lote) — Ecuación 35."""
+    PeR_kW = PeR / 1000.0
+    tf_h   = tf / 3600.0
+    return factor_imp * (Cf_EDESAL + Cr_EDESAL + Cv * PeR_kW * tf_h)
 
-def ganancia_neta(I_tf, CO_tf, CF):
-    """Calcula la ganancia neta G(tf) ($) - Ecuación 30."""
-    # G(tf) = I(tf) - CO(tf) - CF 
-    G_tf = I_tf - CO_tf - CF
-    return G_tf 
+def calcular_CO(tf, PeR, Cv, PrecioEnv, rho_AE, mAE_acum_val):
+    """Costo de operación CO(tf) ($/lote) — Ecuación 34."""
+    Celect = calcular_Celect(tf, PeR, Cv)
+    N      = calcular_N(mAE_acum_val, rho_AE, VolumenEnv)
+    return Celect + N * PrecioEnv, N, Celect
+
+def calcular_G(I, CO, CF):
+    """Ganancia neta G(tf) ($/lote) — Ecuación 32."""
+    return I - CO - CF
 
 # ==============================================================================
-# 3. INTERFAZ STREAMLIT
+# 3. CONFIGURACIÓN DE PÁGINA
 # ==============================================================================
 
-st.set_page_config(layout="wide", page_title="Simulador de Destilación AE")
+st.set_page_config(
+    layout      = "wide",
+    page_title  = "Simulador Destilación AE — Schinus Areira L.",
+    page_icon   = "🌿"
+)
 
-st.title("🌱 Simulador de Destilación por Arrastre con Vapor")
-st.markdown("Cálculo de Rendimiento, Calidad y Ganancia Neta de la extracción de Aceite Esencial de *Schinus Areira*.")
-
-col_op, col_mat, col_econ = st.columns([1, 1, 1])
-
-# --- Columna 1: Parámetros de Operación ---
-with col_op:
-    st.header("1. Condiciones de Operación")
-    
-    PeR = st.number_input("Potencia de Resistencia ($P_{eR}$, W)", value=1000.0, step=100.0, format="%.1f")
-    eta_c = st.slider("Fracción de Calor Perdido ($\eta_c$)", min_value=0.0, max_value=0.2, value=0.1, step=0.01, format="%.2f")
-    Tain = st.number_input("Temp. Agua de Entrada ($T_{in}$, ºC)", value=Tain_BASE, step=1.0, format="%.1f")
-    
-    st.subheader("Tiempo de Operación")
-    tf_min = st.slider("Tiempo Total ($t_f$, min)", min_value=1, max_value=300, value=120, step=5)
-    
-    tf_s = tf_min * 60.0 # Convertir a segundos
-
-# --- Columna 2: Parámetros de Material y Difusión ---
-with col_mat:
-    st.header("2. Parámetros del Material Vegetal")
-    
-    VMV = st.number_input("Volumen de MV ($V_{MV}$, cm³)", value=VMV_BASE, step=10.0, format="%.1f")
-    C0 = st.number_input("Conc. Inicial AE ($C_0$, g/cm³)", value=C0_BASE, step=0.005, format="%.4f")
-    h = st.number_input("Semiespesor del MV ($h$, cm)", value=h_BASE, step=0.01, format="%.3f")
-    # Multiplicamos por 1e-6 ya que el input es el factor 10^-6
-    D = st.number_input(r"Coef. Difusión ($D, 10^{-6}$ cm²/s)", value=D_BASE * 1e6, step=0.1, format="%.3f") * 1e-6
-    rho_AE = st.number_input("Densidad AE (g/cm³)", value=rho_AE_BASE, step=0.05, format="%.2f")
-
-# --- Columna 3: Parámetros Económicos ---
-with col_econ:
-    st.header("3. Parámetros Económicos")
-    
-    PrecioAE = st.number_input("Precio AE ($\$/cm³$)", value=PrecioAE_BASE, step=100.0, format="%.2f")
-    PrecioEnv = st.number_input("Costo Envase ($\$/unidad$)", value=PrecioEnv_BASE, step=10.0, format="%.2f")
-    CF = st.number_input("Costos Fijos ($C_F$, $\$/lote$)", value=CF_BASE, step=1000.0, format="%.2f")
-    Cv = st.number_input("Costo variable $C_v$ ($\$/kWh$)", value=costo_electrico['Cv'], step=1.0, format="%.2f")
-    
+st.title("🌿 Simulador de Destilación por Arrastre con Vapor")
+st.markdown(
+    "Simulación del proceso de extracción de Aceite Esencial de *Schinus Areira L.* — "
+    "Capítulo X: Modelado y simulación"
+)
 st.markdown("---")
 
 # ==============================================================================
-# 4. CÁLCULOS PRINCIPALES Y RESULTADOS
+# 4. SIDEBAR — PARÁMETROS DE ENTRADA
+# ==============================================================================
+
+with st.sidebar:
+    st.header("⚙️ Parámetros de entrada")
+    st.caption("Valores por defecto: Tabla X.4, Capítulo X")
+
+    # --- Operación ---
+    st.subheader("1. Condiciones de operación")
+    PeR    = st.number_input("Potencia resistencia PeR (W)",
+                              value=1500.0, step=100.0, format="%.1f")
+    eta_c  = st.slider("Fracción calor perdido ηc",
+                        min_value=0.0, max_value=0.5,
+                        value=0.1, step=0.01, format="%.2f")
+    Tain   = st.number_input("Temp. agua entrada Tain (ºC)",
+                              value=Tain_BASE, step=1.0, format="%.1f")
+    tf_min = st.slider("Tiempo de operación tf (min)",
+                        min_value=10, max_value=300, value=152, step=5)
+    tf_s   = tf_min * 60.0
+
+    # --- Material vegetal ---
+    st.subheader("2. Material vegetal y difusión")
+    VMV    = st.number_input("Volumen MV — VMV (cm³)",
+                              value=VMV_BASE, step=100.0, format="%.1f")
+    C0     = st.number_input("Conc. inicial AE — C₀ (g/cm³)",
+                              value=C0_BASE, step=0.001, format="%.4f")
+    h      = st.number_input("Semiespesor MV — h (cm)",
+                              value=h_BASE, step=0.5, format="%.2f")
+    D_input= st.number_input("Coef. difusión D (cm²/s)",
+                              value=D_BASE, step=1e-3,
+                              format="%.4f",
+                              help="Valor base ≈ 1×10⁻² cm²/s (≈ 1×10⁻⁶ m²/s). Ajustar con datos experimentales.")
+    D      = D_input
+    rho_AE = st.number_input("Densidad AE — ρ (g/mL)",
+                              value=rho_AE_BASE, step=0.01, format="%.3f",
+                              help="Verificar experimentalmente. Referencia: ~0,84 g/mL")
+
+    # --- Económicos ---
+    st.subheader("3. Parámetros económicos")
+    PrecioAE  = st.number_input("Precio AE ($/mL)",
+                                 value=PrecioAE_BASE, step=100.0, format="%.2f",
+                                 help="Aromáticas Alto Valle, 2026")
+    PrecioEnv = st.number_input("Costo envase 10 mL ($/unidad)",
+                                 value=PrecioEnv_BASE, step=10.0, format="%.2f",
+                                 help="MercadoLibre, 2026")
+    CF        = st.number_input("Costos fijos CF ($/lote)",
+                                 value=CF_BASE, step=500.0, format="%.2f",
+                                 help="8 h mano de obra × $1.815/h (SMVM, Res. 9/2025)")
+    Cv        = st.number_input("Cargo variable electricidad Cv ($/kWh)",
+                                 value=Cv_BASE, step=1.0, format="%.4f",
+                                 help="EDESAL Tarifa T1R-3, 2026")
+
+    st.markdown("---")
+    st.caption("📌 Cargos fijos EDESAL incluidos en CEE (Ec. 35):\n"
+               f"Cf = ${Cf_EDESAL:,.2f}/mes | Cr = ${Cr_EDESAL:,.2f}/mes")
+
+# ==============================================================================
+# 5. CÁLCULOS
 # ==============================================================================
 
 try:
-    # 4.1. Cálculos de Factores y Caudal de Vapor
     mv = calcular_mv(PeR, eta_c, Cpa_BASE, Teb_BASE, Tain, lambda_a_BASE)
-    
-    # Factores F1 y F2 para la difusión (Ecuación 82)
-    F1 = 2 * VMV * C0 * D / (h**2) # [cite: 82]
-    F2 = D * np.pi**2 / (4 * h**2) # [cite: 82]
-    
-    # Validaciones básicas
+    F1 = 2 * VMV * C0 * D / (h**2)
+    F2 = D * np.pi**2 / (4 * h**2)
+
     if mv <= 0 or F1 <= 0 or F2 <= 0:
-        raise ValueError("El Caudal de Vapor o los Factores de Difusión son cero o negativos. Revise $P_{eR}$, $\eta_c$, $D$, $V_{MV}$, $C_0$ o $h$.")
-    
-    # 4.2. Cálculos de Balance de Materia
-    mAE_acum_val = mAE_acum(tf_s, F1, F2) # [cite: 97]
-    xc_val = calcular_xc(mAE_acum_val, mv, tf_s) # [cite: 103]
-    rendimiento_val = calcular_rendimiento(mAE_acum_val, VMV, C0) # [cite: 115]
-    
-    # 4.3. Cálculos Económicos
-    I_tf = ingresos(mAE_acum_val, PrecioAE, rho_AE) # [cite: 193]
-    CO_tf, N_envases = costo_operacion(tf_s, PeR, Cv, PrecioEnv, rho_AE, VolumenEnv, mAE_acum_val) # 
-    G_tf = ganancia_neta(I_tf, CO_tf, CF) # 
-    V_AE_val = mAE_acum_vol(mAE_acum_val, rho_AE)
-    
-    # 4.4. Presentación de Resultados
-    st.header("Resultado de la Simulación a $t_f = {} \min$".format(tf_min))
-    
-    col_out1, col_out2, col_out3 = st.columns(3)
-    
-    with col_out1:
-        st.metric("Rendimiento %Rend", "{:.2f} %".format(rendimiento_val))
-        st.metric("Calidad del Producto $x_c$", "{:.4f} g AE/g cond.".format(xc_val))
-        st.caption("Masa de AE Acumulada: {:.2f} g".format(mAE_acum_val))
+        raise ValueError("Parámetros inválidos: verificar PeR, ηc, D, VMV, C₀ o h.")
 
-    with col_out2:
-        st.metric("Ganancia Neta $G$", "$ARG {:.2f}".format(G_tf), 
-                  help="Ingresos - Costos de Operación - Costos Fijos (Ecuación 30).")
-        st.metric("Volumen de AE Producido", "{:.2f} cm³".format(V_AE_val))
-        st.caption("Caudal de Vapor $m_v$: {:.3f} g/s".format(mv))
+    tc_s = 1.0 / F2
+    tc_h = tc_s / 3600.0
 
-    with col_out3:
-        st.metric("Ingresos $I(t_f)$", "$ARG {:.2f}".format(I_tf))
-        st.metric("Costo Op. $CO(t_f)$", "$ARG {:.2f}".format(CO_tf))
-        st.caption("Envases requeridos: {} unidades".format(int(N_envases)))
-        
+    # Resultados al tiempo tf
+    mAE_val      = mAE_acum(tf_s, F1, F2)
+    xc_val       = calcular_xc(mAE_val, mv, tf_s)
+    rend_val     = calcular_rendimiento(mAE_val, VMV, C0)
+    V_AE_val     = mAE_acum_vol(mAE_val, rho_AE)
+    I_val        = calcular_ingresos(mAE_val, PrecioAE, rho_AE)
+    CO_val, N_val, Celect_val = calcular_CO(tf_s, PeR, Cv, PrecioEnv, rho_AE, mAE_val)
+    G_val        = calcular_G(I_val, CO_val, CF)
+    MAE0         = VMV * C0
+    MAE_rem      = MAE0 - mAE_val
+
+    # Serie temporal para gráfico
+    t_arr = np.arange(60, tf_s + 60, 60)
+    G_arr, I_arr, CT_arr = [], [], []
+
+    for t_i in t_arr:
+        mAE_i        = mAE_acum(t_i, F1, F2)
+        I_i          = calcular_ingresos(mAE_i, PrecioAE, rho_AE)
+        CO_i, _, _   = calcular_CO(t_i, PeR, Cv, PrecioEnv, rho_AE, mAE_i)
+        G_i          = calcular_G(I_i, CO_i, CF)
+        G_arr.append(G_i)
+        I_arr.append(I_i)
+        CT_arr.append(CO_i + CF)
+
+    G_arr  = np.array(G_arr)
+    t_min  = t_arr / 60.0
+
+    # Punto de rentabilidad
+    t_eq = None
+    if G_arr.max() > 0 and G_arr.min() < 0:
+        t_eq = float(np.interp(0, G_arr, t_min))
+
+    # Tiempo óptimo (máximo de G)
+    idx_opt = int(np.argmax(G_arr))
+    t_opt   = t_min[idx_opt]
+    G_opt   = G_arr[idx_opt]
+
+    # ==============================================================================
+    # 6. RESULTADOS EN PANTALLA
+    # ==============================================================================
+
+    # Barra de info superior
+    st.info(
+        f"⏱ **Tiempo característico:** tc = {tc_h:.2f} h ({tc_s:.0f} s)   |   "
+        f"💧 **Caudal de vapor:** mv = {mv*1000:.3f} g/s   |   "
+        f"⚖️ **Masa inicial AE:** MAE₀ = {MAE0:.2f} g"
+    )
+
+    tab1, tab2 = st.tabs(["📊 Resultados", "📈 Gráfico G(t)"])
+
+    # --- TAB 1: RESULTADOS ---
+    with tab1:
+        st.subheader(f"Resultados a tf = {tf_min} min")
+
+        # Proceso
+        st.markdown("##### 🔬 Proceso")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Rendimiento %Rend",     f"{rend_val:.2f} %")
+        c2.metric("Calidad del producto xc", f"{xc_val*100:.3f} %")
+        c3.metric("Masa AE acumulada",     f"{mAE_val:.3f} g")
+        c4.metric("Volumen AE producido",  f"{V_AE_val:.3f} mL")
+
+        st.markdown("---")
+
+        # Económico
+        st.markdown("##### 💰 Económico")
+        e1, e2, e3, e4 = st.columns(4)
+        e1.metric("Ingresos I(tf)",          f"$ {I_val:,.0f}")
+        e2.metric("Costo operación CO(tf)",  f"$ {CO_val:,.0f}")
+        e3.metric("Costos fijos CF",         f"$ {CF:,.0f}")
+        e4.metric("Ganancia neta G(tf)",     f"$ {G_val:,.0f}",
+                  delta="positiva ✅" if G_val > 0 else "negativa ❌",
+                  delta_color="normal" if G_val > 0 else "inverse")
+
+        st.markdown("---")
+
+        # Adicional
+        st.markdown("##### 📦 Detalles")
+        a1, a2, a3, a4 = st.columns(4)
+        a1.metric("Envases completos (10 mL)", f"{N_val} unidades")
+        a2.metric("Costo eléctrico CEE",       f"$ {Celect_val:,.0f}")
+        a3.metric("AE remanente en MV",        f"{MAE_rem:.3f} g")
+        a4.metric("Tiempo óptimo t_opt",       f"{t_opt:.0f} min  |  G = $ {G_opt:,.0f}")
+
+        st.markdown("---")
+
+        # Mensaje de rentabilidad
+        if t_eq:
+            st.success(f"✅ El proceso es rentable a partir de **{t_eq:.1f} min**. "
+                       f"La ganancia máxima es **$ {G_opt:,.0f}** a los **{t_opt:.0f} min**.")
+        else:
+            st.warning("⚠️ Con los parámetros actuales el proceso no alcanza rentabilidad "
+                       "en el tiempo simulado. Aumentá tf o revisá los parámetros económicos.")
+
+    # --- TAB 2: GRÁFICO ---
+    with tab2:
+        st.subheader("Análisis económico: Ingresos, Costos y Ganancia neta vs. tiempo")
+
+        fig, ax = plt.subplots(figsize=(11, 5))
+
+        ax.plot(t_min, I_arr,  color='steelblue', lw=2,   label='Ingresos $I(t)$')
+        ax.plot(t_min, CT_arr, color='firebrick',  lw=2,   label='Costos totales $CO(t) + C_F$')
+        ax.plot(t_min, G_arr,  color='seagreen',   lw=2.5, label='Ganancia neta $G(t)$')
+        ax.axhline(0, color='black', lw=0.8, ls='-')
+
+        if t_eq:
+            ax.axvline(t_eq, color='tomato', lw=1.5, ls='--',
+                       label=f'Rentable desde {t_eq:.1f} min')
+            ax.plot(t_eq, 0, 'o', color='tomato', ms=7)
+
+        ax.axvline(t_opt, color='seagreen', lw=1.5, ls=':',
+                   label=f'Tiempo óptimo {t_opt:.0f} min (G = ${G_opt:,.0f})')
+        ax.plot(t_opt, G_opt, 's', color='seagreen', ms=8)
+
+        ax.set_xlabel('Tiempo de operación (min)', fontsize=11)
+        ax.set_ylabel('$ (pesos / lote)',           fontsize=11)
+        ax.set_title('Ganancia neta G(t) en función del tiempo de operación', fontsize=12)
+        ax.legend(fontsize=9, loc='upper left')
+        ax.grid(True, linestyle='--', alpha=0.4)
+        ax.set_xlim([0, t_min[-1]])
+
+        st.pyplot(fig, use_container_width=True)
+
+        if t_eq:
+            st.success(f"✅ Rentable desde **{t_eq:.1f} min** | "
+                       f"Tiempo óptimo: **{t_opt:.0f} min** | "
+                       f"Ganancia máxima: **$ {G_opt:,.0f} /lote**")
+
 except ValueError as ve:
-    st.error(f"Error en el cálculo: {ve}")
+    st.error(f"❌ Error en el cálculo: {ve}")
 except Exception as e:
-    st.error("Error en el cálculo: Por favor, revise los parámetros de entrada.")
-    
-st.markdown("---")
-
-# --- 5. GRÁFICA DE LA GANANCIA NETA ---
-
-st.subheader("Gráfico de Ganancia Neta vs. Tiempo")
-
-if tf_min >= 60:
-    # 5.1 Recalculo para la gráfica
-    time_points_s_plot = np.arange(60, tf_s + 60, 60)
-    resultados_plot = []
-
-    for tf_s_plot in time_points_s_plot:
-        try:
-            mAE_acum_val_plot = mAE_acum(tf_s_plot, F1, F2)
-            I_tf_plot = ingresos(mAE_acum_val_plot, PrecioAE, rho_AE)
-            CO_tf_plot, _ = costo_operacion(tf_s_plot, PeR, Cv, PrecioEnv, rho_AE, VolumenEnv, mAE_acum_val_plot)
-            G_tf_plot = ganancia_neta(I_tf_plot, CO_tf_plot, CF)
-            
-            resultados_plot.append({
-                'Tiempo_min': tf_s_plot / 60.0,
-                'Ganancia_neta': G_tf_plot
-            })
-        except:
-            continue
-
-    if resultados_plot:
-        df_plot = pd.DataFrame(resultados_plot)
-
-        # Encontrar el punto de equilibrio (G=0)
-        if df_plot['Ganancia_neta'].max() > 0:
-            tiempo_equilibrio_min = np.interp(0, df_plot['Ganancia_neta'], df_plot['Tiempo_min'])
-        else:
-            tiempo_equilibrio_min = 0 
-        
-        # Generar el gráfico
-        fig, ax = plt.subplots(figsize=(8, 4))
-        ax.plot(df_plot['Tiempo_min'], df_plot['Ganancia_neta'], label='Ganancia Neta $G(t)$', color='green')
-        ax.axhline(0, color='red', linestyle='--', linewidth=0.8, label='Punto de Equilibrio ($G=0$)')
-        
-        if tiempo_equilibrio_min > 0 and tiempo_equilibrio_min < df_plot['Tiempo_min'].max():
-            ax.axvline(tiempo_equilibrio_min, color='red', linestyle=':', linewidth=0.8)
-            ax.plot(tiempo_equilibrio_min, 0, 'ro', label=f'Rentable a {tiempo_equilibrio_min:.1f} min')
-
-        ax.set_title('Ganancia Neta Obtenida vs. Tiempo de Operación', fontsize=12)
-        ax.set_xlabel('Tiempo de Operación ($t$) [min]', fontsize=10)
-        ax.set_ylabel('Ganancia Neta $G$ [$ARG]', fontsize=10)
-        ax.grid(True, linestyle='--', alpha=0.6)
-        ax.legend()
-        st.pyplot(fig)
-        
-        if tiempo_equilibrio_min > 0 and tiempo_equilibrio_min < df_plot['Tiempo_min'].max():
-            # El valor de 31.1 min es el reportado por el documento 
-            # Si el cálculo lo reproduce (debe ser con los parámetros base), se muestra ese.
-            # Sino, se muestra el valor calculado.
-            st.success(f"El proceso comienza a ser rentable a partir de los **{tiempo_equilibrio_min:.1f} minutos**.")
-        else:
-            st.warning("El tiempo de operación actual es insuficiente para cubrir los Costos Fijos.")
-    else:
-        st.warning("El tiempo de operación es demasiado corto para generar una curva de ganancia significativa (mínimo 1 minuto).")
-else:
-     st.warning("Aumenta el tiempo de operación (mínimo 60 min) para ver el gráfico de Ganancia Neta.")
+    st.error("❌ Error inesperado. Por favor revisá los parámetros de entrada.")
+    st.exception(e)
