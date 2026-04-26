@@ -171,7 +171,15 @@ with st.sidebar:
                f"Cf = ${Cf_EDESAL:,.2f}/mes | Cr = ${Cr_EDESAL:,.2f}/mes")
 
 # ==============================================================================
-# 5. CÁLCULOS
+# 5. FUNCIÓN DE FORMATO NUMÉRICO (Argentina: coma decimal, sin separador de miles)
+# ==============================================================================
+
+def fmt(val, decimals=0):
+    """Formato argentino: sin separador de miles, coma decimal."""
+    return f"{val:.{decimals}f}".replace(".", ",")
+
+# ==============================================================================
+# 6. CÁLCULOS
 # ==============================================================================
 
 try:
@@ -182,8 +190,9 @@ try:
     if mv <= 0 or F1 <= 0 or F2 <= 0:
         raise ValueError("Parámetros inválidos: verificar PeR, ηc, D, VMV, C₀ o h.")
 
-    tc_s = 1.0 / F2
-    tc_h = tc_s / 3600.0
+    tc_s   = 1.0 / F2
+    tc_h   = tc_s / 3600.0
+    tc_min = tc_s / 60.0
 
     # Resultados al tiempo tf
     mAE_val      = mAE_acum(tf_s, F1, F2)
@@ -228,9 +237,9 @@ try:
 
     # Barra de info superior
     st.info(
-        f"⏱ **Tiempo característico:** tc = {tc_h:.2f} h ({tc_s:.0f} s)   |   "
-        f"💧 **Caudal de vapor:** mv = {mv*1000:.3f} g/s   |   "
-        f"⚖️ **Masa inicial AE:** MAE₀ = {MAE0:.2f} g"
+        f"⏱ **Tiempo característico:** tc = {fmt(tc_min,1)} min   |   "
+        f"💧 **Caudal de vapor:** mv = {fmt(mv*1000,3)} g/s   |   "
+        f"⚖️ **Masa inicial AE:** MAE₀ = {fmt(MAE0,2)} g"
     )
 
     tab1, tab2 = st.tabs(["📊 Resultados", "📈 Gráfico G(t)"])
@@ -242,20 +251,20 @@ try:
         # Proceso
         st.markdown("##### 🔬 Proceso")
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Rendimiento %Rend",     f"{rend_val:.2f} %")
-        c2.metric("Calidad del producto xc", f"{xc_val*100:.3f} %")
-        c3.metric("Masa AE acumulada",     f"{mAE_val:.3f} g")
-        c4.metric("Volumen AE producido",  f"{V_AE_val:.3f} mL")
+        c1.metric("Rendimiento %Rend",     f"{fmt(rend_val,2)} %")
+        c2.metric("Calidad del producto xc", f"{fmt(xc_val*100,3)} %")
+        c3.metric("Masa AE acumulada",     f"{fmt(mAE_val,3)} g")
+        c4.metric("Volumen AE producido",  f"{fmt(V_AE_val,3)} mL")
 
         st.markdown("---")
 
         # Económico
         st.markdown("##### 💰 Económico")
         e1, e2, e3, e4 = st.columns(4)
-        e1.metric("Ingresos I(tf)",          f"$ {I_val:,.0f}")
-        e2.metric("Costo operación CO(tf)",  f"$ {CO_val:,.0f}")
-        e3.metric("Costos fijos CF",         f"$ {CF:,.0f}")
-        e4.metric("Ganancia neta G(tf)",     f"$ {G_val:,.0f}",
+        e1.metric("Ingresos I(tf)",          f"$ {fmt(I_val,0)}")
+        e2.metric("Costo operación CO(tf)",  f"$ {fmt(CO_val,0)}")
+        e3.metric("Costos fijos CF",         f"$ {fmt(CF,0)}")
+        e4.metric("Ganancia neta G(tf)",     f"$ {fmt(G_val,0)}",
                   delta="positiva ✅" if G_val > 0 else "negativa ❌",
                   delta_color="normal" if G_val > 0 else "inverse")
 
@@ -265,16 +274,16 @@ try:
         st.markdown("##### 📦 Detalles")
         a1, a2, a3, a4 = st.columns(4)
         a1.metric("Envases completos (10 mL)", f"{N_val} unidades")
-        a2.metric("Costo eléctrico CEE",       f"$ {Celect_val:,.0f}")
-        a3.metric("AE remanente en MV",        f"{MAE_rem:.3f} g")
-        a4.metric("Tiempo óptimo t_opt",       f"{t_opt:.0f} min  |  G = $ {G_opt:,.0f}")
+        a2.metric("Costo eléctrico CEE",       f"$ {fmt(Celect_val,0)}")
+        a3.metric("AE remanente en MV",        f"{fmt(MAE_rem,3)} g")
+        a4.metric("Tiempo óptimo t_opt",       f"{fmt(t_opt,0)} min  |  G = $ {fmt(G_opt,0)}")
 
         st.markdown("---")
 
         # Mensaje de rentabilidad
         if t_eq:
-            st.success(f"✅ El proceso es rentable a partir de **{t_eq:.1f} min**. "
-                       f"La ganancia máxima es **$ {G_opt:,.0f}** a los **{t_opt:.0f} min**.")
+            st.success(f"✅ El proceso es rentable a partir de **{fmt(t_eq,1)} min**. "
+                       f"La ganancia máxima es **$ {fmt(G_opt,0)}** a los **{fmt(t_opt,0)} min**.")
         else:
             st.warning("⚠️ Con los parámetros actuales el proceso no alcanza rentabilidad "
                        "en el tiempo simulado. Aumentá tf o revisá los parámetros económicos.")
@@ -292,11 +301,11 @@ try:
 
         if t_eq:
             ax.axvline(t_eq, color='tomato', lw=1.5, ls='--',
-                       label=f'Rentable desde {t_eq:.1f} min')
+                       label=f'Rentable desde {fmt(t_eq,1)} min')
             ax.plot(t_eq, 0, 'o', color='tomato', ms=7)
 
         ax.axvline(t_opt, color='seagreen', lw=1.5, ls=':',
-                   label=f'Tiempo óptimo {t_opt:.0f} min (G = ${G_opt:,.0f})')
+                   label=f'Tiempo óptimo {fmt(t_opt,0)} min (G = ${fmt(G_opt,0)})')
         ax.plot(t_opt, G_opt, 's', color='seagreen', ms=8)
 
         ax.set_xlabel('Tiempo de operación (min)', fontsize=11)
@@ -309,9 +318,9 @@ try:
         st.pyplot(fig, use_container_width=True)
 
         if t_eq:
-            st.success(f"✅ Rentable desde **{t_eq:.1f} min** | "
-                       f"Tiempo óptimo: **{t_opt:.0f} min** | "
-                       f"Ganancia máxima: **$ {G_opt:,.0f} /lote**")
+            st.success(f"✅ Rentable desde **{fmt(t_eq,1)} min** | "
+                       f"Tiempo óptimo: **{fmt(t_opt,0)} min** | "
+                       f"Ganancia máxima: **$ {fmt(G_opt,0)} /lote**")
 
 except ValueError as ve:
     st.error(f"❌ Error en el cálculo: {ve}")
