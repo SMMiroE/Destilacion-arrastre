@@ -12,8 +12,8 @@ Tain_BASE     = 20.0      # Temperatura del agua de entrada al calderín (ºC)
 Teb_BASE      = 100.0     # Temperatura de ebullición (ºC)
 lambda_a_BASE = 2257.0    # Calor específico de vaporización del agua (J/g)
 
-VMV_BASE      = 2500.0    # Volumen de Material Vegetal (cm³)
-C0_BASE       = 0.006     # Concentración inicial de AE en MV (g/cm³)
+VMV_BASE      = 2000.0    # Volumen de Material Vegetal (cm³) — 1 canasto
+C0_BASE       = 0.0063    # Concentración inicial de AE en MV (g/cm³) — valor propuesto
 h_BASE        = 10.0      # Semiespesor del lecho (cm)
 D_BASE        = 1.0e-2    # Coeficiente de difusión del AE en el sólido (cm²/s) ≈ 1e-6 m²/s
 rho_AE_BASE   = 0.84      # Densidad del AE (g/mL) — verificar experimentalmente
@@ -137,7 +137,9 @@ with st.sidebar:
     # --- Material vegetal ---
     st.subheader("2. Material vegetal y difusión")
     VMV    = st.number_input("Volumen MV — VMV (cm³)",
-                              value=VMV_BASE, step=100.0, format="%.1f")
+                              value=VMV_BASE, min_value=0.0, max_value=8000.0,
+                              step=500.0, format="%.0f",
+                              help="Capacidad máxima: 4 canastos × 2000 cm³ = 8000 cm³ (lote completo)")
     C0     = st.number_input("Conc. inicial AE — C₀ (g/cm³)",
                               value=C0_BASE, step=0.001, format="%.4f")
     h      = st.number_input("Semiespesor MV — h (cm)",
