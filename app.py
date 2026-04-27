@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
+from scipy.optimize import brentq
 
 # ==============================================================================
 # 1. CONSTANTES Y PARÁMETROS (Tabla X.4 — Capítulo X)
@@ -40,6 +41,14 @@ def calcular_mv(PeR, eta_c, Cpa, Teb, Tain, lambda_a):
     if denominador == 0:
         return 0.0
     return numerador / denominador
+
+def mAE_acum_inst(t, F1, F2, n_terms=10):
+    """Tasa instantánea de transferencia de AE mAE(t) (g/s) — Ecuación 8."""
+    total = 0.0
+    for n in range(n_terms):
+        term = (2 * n + 1)**2
+        total += np.exp(-F2 * term * t)
+    return F1 * total
 
 def mAE_acum(tf, F1, F2, n_terms=10):
     """Masa acumulada de AE en el tiempo tf (g) — Ecuación 14."""
@@ -228,10 +237,32 @@ try:
     if G_arr.max() > 0 and G_arr.min() < 0:
         t_eq = float(np.interp(0, G_arr, t_min))
 
-    # Tiempo óptimo (máximo de G)
-    idx_opt = int(np.argmax(G_arr))
-    t_opt   = t_min[idx_opt]
-    G_opt   = G_arr[idx_opt]
+    # Tiempo óptimo — Ecuación 42: mAE(t_opt) = 1.27383·Cv·PeR·rho_AE/PrecioAE
+    # Se resuelve numéricamente por bisección (Brent)
+    target = factor_imp * (Cv / 1000.0) * PeR * rho_AE / PrecioAE  # g/s
+
+    def ecuacion42(t_s):
+        return mAE_acum_inst(t_s, F1, F2) - target
+
+    # Buscar t_opt en el rango [60s, tf_s]
+    try:
+        if ecuacion42(60) * ecuacion42(tf_s) < 0:
+            t_opt_s = brentq(ecuacion42, 60, tf_s, xtol=1.0)
+            t_opt   = t_opt_s / 60.0
+        else:
+            # Si no hay cruce de signo, usar argmax como fallback
+            idx_opt = int(np.argmax(G_arr))
+            t_opt   = t_min[idx_opt]
+    except Exception:
+        idx_opt = int(np.argmax(G_arr))
+        t_opt   = t_min[idx_opt]
+
+    # Calcular G en t_opt
+    t_opt_s  = t_opt * 60.0
+    mAE_opt  = mAE_acum(t_opt_s, F1, F2)
+    I_opt    = calcular_ingresos(mAE_opt, PrecioAE, rho_AE)
+    CO_opt, _, _ = calcular_CO(t_opt_s, PeR, Cv, PrecioEnv, rho_AE, mAE_opt)
+    G_opt    = calcular_G(I_opt, CO_opt, CF)
 
     # ==============================================================================
     # 6. RESULTADOS EN PANTALLA
