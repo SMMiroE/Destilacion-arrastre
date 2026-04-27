@@ -212,6 +212,11 @@ try:
     G_val        = calcular_G(I_val, CO_val, CF)
     MAE0         = VMV * C0
     MAE_rem      = MAE0 - mAE_val
+    # Precio mínimo de venta (G=0)
+    if mAE_val > 0:
+        PrecioAE_min = (CO_val + CF) * rho_AE / mAE_val
+    else:
+        PrecioAE_min = 0.0
 
     # Serie temporal para gráfico
     t_arr = np.arange(60, tf_s + 60, 60)
@@ -307,6 +312,13 @@ try:
         a2.metric("Costo eléctrico CEE",       f"$ {fmt(Celect_val,0)}")
         a3.metric("AE remanente en MV",        f"{fmt(MAE_rem,3)} g")
         a4.metric("Tiempo óptimo t_opt",       f"{fmt(t_opt,0)} min  |  G = $ {fmt(G_opt,0)}")
+
+        st.markdown("---")
+        st.markdown("##### 💲 Precio mínimo de venta")
+        p1, p2 = st.columns(2)
+        p1.metric("Precio mínimo AE (G = 0)",  f"$ {fmt(PrecioAE_min,0)} /mL",
+                  help="Precio por debajo del cual la operación no es rentable para el tf actual")
+        p2.metric("Precio de mercado AE",       f"$ {fmt(PrecioAE,0)} /mL")
 
         st.markdown("---")
 
