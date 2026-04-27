@@ -25,8 +25,6 @@ VolumenEnv     = 10.0     # Volumen del envase (mL)
 CF_BASE        = 14520.0  # Costos fijos ($/lote): 8 h × $1.815/h — SMVM Res. 9/2025
 
 # Tarifa EDESAL (Tabla X.3 — Capítulo X)
-Cf_EDESAL  = 9634.9154    # Cargo fijo ($/mes)
-Cr_EDESAL  = 18963.3389   # Cargo uso de red ($/mes)
 Cv_BASE    = 117.9787     # Cargo variable ($/kWh)
 factor_imp = 1.27383      # Factor impositivo (IVA 21% + Contrib. Municipal 6,383%)
 
@@ -93,7 +91,7 @@ def calcular_Celect(tf, PeR, Cv):
     """Costo de energía eléctrica CEE ($/lote) — Ecuación 35."""
     PeR_kW = PeR / 1000.0
     tf_h   = tf / 3600.0
-    return factor_imp * (Cf_EDESAL + Cr_EDESAL + Cv * PeR_kW * tf_h)
+    return factor_imp * Cv * PeR_kW * tf_h
 
 def calcular_CO(tf, PeR, Cv, PrecioEnv, rho_AE, mAE_acum_val):
     """Costo de operación CO(tf) ($/lote) — Ecuación 34."""
@@ -178,8 +176,7 @@ with st.sidebar:
                                  help="EDESAL Tarifa T1R-3, 2026")
 
     st.markdown("---")
-    st.caption("📌 Cargos fijos EDESAL incluidos en CEE (Ec. 35):\n"
-               f"Cf = ${Cf_EDESAL:,.2f}/mes | Cr = ${Cr_EDESAL:,.2f}/mes")
+    st.caption("📌 Cv = cargo variable EDESAL T1R-3 (2026). Factor 1,27383 incluye IVA y Contrib. Municipal.")
 
 # ==============================================================================
 # 5. FUNCIÓN DE FORMATO NUMÉRICO (Argentina: coma decimal, sin separador de miles)
