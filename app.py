@@ -71,8 +71,7 @@ st.set_page_config(layout="wide",
                    page_icon="🌿")
 
 st.title("🌿 Simulador de Destilación por Arrastre con Vapor")
-st.markdown("Simulación del proceso de extracción de Aceite Esencial de *Schinus Areira L.* — "
-            "Capítulo X: Modelado y simulación")
+st.markdown("Simulación del proceso de extracción de Aceite Esencial de *Schinus Areira L.* — ")
 st.markdown("---")
 
 # ==============================================================================
@@ -84,7 +83,6 @@ with st.sidebar:
     st.subheader("1. Condiciones de operación")
     PeR    = st.number_input("Potencia resistencia PeR (W)", value=1000.0, step=100.0, format="%.1f")
     eta_c  = st.slider("Fracción calor perdido ηc", 0.0, 0.5, 0.0, 0.01, format="%.2f")
-    Tain   = st.number_input("Temp. agua entrada Tain (°C)", value=Tain_BASE, step=1.0, format="%.1f")
     t_cal  = st.number_input("Tiempo de puesta en marcha (min)", value=33.0, step=1.0, format="%.0f",
                               help="Tiempo desde el encendido hasta la primera gota de condensado")
     tf_min = st.slider("Tiempo de destilación tf (min)", 10, 300, 88, 5)
