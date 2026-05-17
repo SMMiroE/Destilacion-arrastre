@@ -18,7 +18,7 @@ rho_AE_BASE   = 0.88       # g/mL
 PrecioAE_BASE = 4000.0     # $/mL
 CF_BASE       = 14520.0    # $/lote
 Cv_BASE       = 117.9787   # $/kWh
-factor_imp    = 1.27383    # IVA + Contrib. Municipal
+factor_imp    = 1.27    # IVA + Contrib. Municipal
 
 # ==============================================================================
 # 2. FUNCIONES
@@ -68,7 +68,7 @@ st.set_page_config(layout="wide",
 
 st.title("🌿 Simulador de Destilacion por Arrastre con Vapor")
 st.markdown("Simulacion del proceso de extraccion de Aceite Esencial de *Schinus Areira L.* - "
-            "Capitulo X: Modelado y simulacion")
+            )
 st.markdown("---")
 
 # ==============================================================================
@@ -105,7 +105,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.caption(f"Tiempo total de operacion: {t_total_min:.0f} min")
-    st.caption("Factor impositivo 1,27383 incluye IVA y Contrib. Municipal.")
+    st.caption("Factor impositivo 1,27 incluye IVA y Contrib. Municipal.")
 
 # ==============================================================================
 # 5. CALCULOS
